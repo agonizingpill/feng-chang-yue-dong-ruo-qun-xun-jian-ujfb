@@ -10,6 +10,11 @@ def plan(db,body,user):
     if visit.status not in ['screened','needs_requeen']:raise HTTPException(409,'须先完成弱群筛查，或为无王复查建立换王处置')
     if body.feed_kg>3:raise HTTPException(409,'每箱单次饲喂不得超过3kg，请拆分到后续复查计划')
     if body.kind=='feed' and body.feed_kg<=0:raise HTTPException(409,'饲喂量必须大于0')
+    from .review_models import ScreenReview
+    review=db.scalar(select(ScreenReview).where(ScreenReview.visit_id==visit.id).with_for_update())
+    if review and review.state in ('pending','revoked'):
+        if body.kind=='feed':raise HTTPException(409,'该巡检复判待办或已确认误报，不能新建饲喂；无王换王照常办理')
+        if hive.queen_present:raise HTTPException(409,'该巡检复判待办或已确认误报且箱内有王，不能建换王单，请先完成复判或另记新巡检')
     if body.kind=='requeen' and body.feed_kg!=0:raise HTTPException(409,'换王计划饲喂量应为0，饲喂需单独记录')
     if visit.status=='needs_requeen' and body.kind!='requeen':raise HTTPException(409,'无王群复查失败后必须建立换王处置')
     active=db.scalar(select(CareAction).where(CareAction.visit_id==visit.id,CareAction.status.in_(['planned','executed','rechecked'])))

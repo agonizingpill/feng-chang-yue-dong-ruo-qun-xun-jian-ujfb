@@ -4,6 +4,7 @@ import redis
 from sqlalchemy import select
 from .database import Session
 from .models import Visit,Hive
+from .review_models import ScreenReview
 from .screen_model import screen,reference_model
 from .yard_service import latest
 queue=redis.Redis.from_url(os.getenv('REDIS_URL','redis://redis:6379/0'),decode_responses=True)
@@ -20,8 +21,10 @@ while True:
                 score,flag,margin,evidence=screen(visit)
                 visit.anomaly_score=score;visit.anomaly_flag=flag;visit.decision_margin=margin;visit.model_evidence=evidence;visit.status='screened'
                 hive=db.get(Hive,visit.hive_id)
-                if latest(db,hive.id)==visit.id:hive.care_state='needs_care' if flag or not visit.queen_seen else 'observe'
-                db.commit();points.append({'visit_id':visit.id,'hive_id':hive.id,'score':score,'flag':flag})
+                review=db.scalar(select(ScreenReview).where(ScreenReview.visit_id==visit.id))
+                effective={'upheld':True,'revoked':False}.get(review.state,flag) if review else flag
+                if latest(db,hive.id)==visit.id:hive.care_state='needs_care' if effective or not visit.queen_seen else 'observe'
+                db.commit();points.append({'visit_id':visit.id,'hive_id':hive.id,'score':score,'flag':flag,'review':review.state if review else None})
         result={'status':'done','count':len(points),'points':points,'evidence':evidence}
         Path('/artifacts').mkdir(exist_ok=True);Path(f"/artifacts/screen-{task['job_id']}.json").write_text(json.dumps(result))
         queue.set('apiary:screen:'+task['job_id'],json.dumps(result),ex=86400)

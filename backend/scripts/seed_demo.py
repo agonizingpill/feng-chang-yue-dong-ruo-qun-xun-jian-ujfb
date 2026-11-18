@@ -14,6 +14,7 @@ def seed():
         for role in ['admin','beekeeper','viewer']:
             email=role+'@shanjing.test'
             if not db.scalar(select(User).where(User.email==email)):db.add(User(email=email,password=hash_password('Hive2026!'),role=role))
+        if not db.scalar(select(User).where(User.email=='admin2@shanjing.test')):db.add(User(email='admin2@shanjing.test',password=hash_password('Hive2026!'),role='admin'))
         for i in range(1,81):
             code=f'H-{i:03}'
             if not db.scalar(select(Hive).where(Hive.code==code)):db.add(Hive(code=code,site='山荆东坡' if i<=40 else '山荆林缘',queen_present=i not in [31,62],colony_frames=4 if i in [31,47,62,75] else 8,care_state='observe'))

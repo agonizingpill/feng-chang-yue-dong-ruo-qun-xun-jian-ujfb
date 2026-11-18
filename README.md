@@ -53,7 +53,7 @@ Redis队列交Python worker真算，结果写Visit并在共享artifacts卷留JSO
 7. 15:00 复查24kg、见王、6框，主管关闭；H-031越冬复查通过。
 8. 16:00 H-018有王群完成1.5kg饲喂，复查24.5kg/7框后关闭，观察员查审计。
 
-Seed按email、Hive.code、Visit.code及饲料批号自然键只补缺少记录，不覆盖人工修改；3账号、80箱、100巡检和3个饲料批次。
+Seed按email、Hive.code、Visit.code及饲料批号自然键只补缺少记录，不覆盖人工修改；3账号、80箱、100巡检和3个饲料批次（V4起另补admin2@shanjing.test用于复判）。
 
 ## 工程、目录与开发
 
@@ -100,3 +100,17 @@ Seed增加FD-202611-A可用30kg、FD-HOLD隔离8kg、FD-EXPIRED已过期5kg，�
 GET /moves /insulation-lots /insulation-installs /spring-reviews供三角色；POST /moves、complete/cancel、POST /insulation-lots、POST /insulation-installs、PUT ventilation、POST remove及POST /spring-reviews允许蜂师/主管；move approve、insulation accept、spring pass及物料隔离仅主管，viewer全部只读。各新增模型均有外键；物料数量与春检值域由数据库和Pydantic校验。
 
 Seed只在缺失时增加IN-2026-WINTER 120件，不改人工库存/安装/春检；历史winter_ready无需补装以维持历史状态，新的春检动作才要求保温。真实证据在test-artifacts/gb-1027/v3/。本地检疫留痕不替代行政检疫证；每箱每季一条春检，本演示固定2026越冬季，无跨季归档。
+
+
+## V4 筛查复判
+
+筛查提示异常、现场蜂群却正常时，蜂师在“弱群筛查”页对该次巡检填写现场说明申请复判，可直接看到原异常分值与当前结论。复判只有对已筛查且标记异常的**该箱最新**巡检可申请；未提示异常、已进入新巡检或已办成饲喂单的巡检不受理。
+
+- `ScreenReview` 与 Visit 一一对应，冻结申请时的原分值、原异常标记与原阈值；申请人和申请说明留痕，原 Visit 分值与模型证据不改写。
+- 待复判或确认误报的巡检不能新建饲喂单；无王换王照常办理。申请与建饲喂单并发时，两者都先锁 Visit 行，先办成的一方有效，后到方收到 409 提示。
+- 裁决须由申请人以外的另一名主管作出，只能“维持告警”或“确认误报”，并留下裁决说明；同一裁决重试幂等，不重复裁决，相反裁决拒绝。
+- 确认误报只在当前箱况为 needs_care/observe 时把该箱回到“按王况观察”，不改巡检原分值；维持告警保持原状。
+- 期间若该箱出现新巡检，旧单裁决仍落库但标记 superseded，卡片显示“旧单仅供查阅”，不再影响箱况。
+- 同一次巡检重筛（worker 重算分数）不会清除已裁决结论：维持告警仍按异常提示关注，确认误报仍按王况观察；回执缓存丢失后重试裁决，同结论直接返回原单，不重复裁决。
+
+接口：`GET/POST /screen-reviews`、`POST /screen-reviews/{id}/decision`（仅主管）。蜂师在筛查页申请，另一名主管在“复判记录”裁决；观察员只读。新增 `review_models.py/review_schemas.py/review_service.py/review_routes.py`，在 `care_service.plan` 的饲喂/换王守卫中读取复判状态。Seed 增加 `admin2@shanjing.test`（同为 admin，密码一致）用于演示“另一名主管裁决”，现有账号与数据不变；`screen_reviews` 表由 metadata 补建。
